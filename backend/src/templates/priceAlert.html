@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Price Alert — Wait-n-Save</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    /* Reset */
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0f0f13;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: #e2e8f0;
+    }
+
+    .wrapper {
+      width: 100%;
+      background-color: #0f0f13;
+      padding: 40px 16px;
+      box-sizing: border-box;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #1a1a24;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid #2d2d3d;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #6c3fff 0%, #a855f7 50%, #ec4899 100%);
+      padding: 32px 40px;
+      text-align: center;
+    }
+    .header-logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.75);
+      margin-bottom: 8px;
+    }
+    .header-title {
+      font-size: 28px;
+      font-weight: 800;
+      color: #ffffff;
+      margin: 0;
+      line-height: 1.2;
+    }
+    .header-subtitle {
+      font-size: 15px;
+      color: rgba(255,255,255,0.8);
+      margin-top: 6px;
+    }
+
+    /* Body padding */
+    .body-pad {
+      padding: 32px 40px;
+    }
+
+    /* Digest intro */
+    .digest-intro {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-bottom: 28px;
+      text-align: center;
+    }
+
+    /* Product card */
+    .product-card {
+      background-color: #12121c;
+      border: 1px solid #2d2d3d;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+
+    .product-image-wrap {
+      background-color: #1e1e2e;
+      text-align: center;
+      padding: 20px;
+    }
+    .product-image-wrap img {
+      max-height: 180px;
+      max-width: 100%;
+      border-radius: 8px;
+      object-fit: contain;
+    }
+
+    .product-body {
+      padding: 20px 24px 24px;
+    }
+
+    /* Event badge */
+    .event-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-bottom: 12px;
+    }
+    .badge-price_drop  { background: #064e3b; color: #34d399; }
+    .badge-clearance   { background: #7f1d1d; color: #f87171; }
+    .badge-seasonal    { background: #451a03; color: #fb923c; }
+    .badge-sale        { background: #1e1b4b; color: #818cf8; }
+    .badge-delisted    { background: #1c1917; color: #a8a29e; }
+
+    .product-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #f1f5f9;
+      line-height: 1.4;
+      margin: 0 0 16px;
+      text-decoration: none;
+    }
+    .product-title a {
+      color: #f1f5f9;
+      text-decoration: none;
+    }
+    .product-title a:hover { color: #a78bfa; }
+
+    /* Price comparison row */
+    .price-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    /* Fallback table layout for email clients */
+    .price-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    .price-old-cell { padding-right: 16px; vertical-align: middle; }
+    .price-new-cell { vertical-align: middle; }
+    .price-pct-cell { vertical-align: middle; text-align: right; }
+
+    .price-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+    .price-old {
+      font-size: 18px;
+      color: #64748b;
+      text-decoration: line-through;
+    }
+    .price-new {
+      font-size: 28px;
+      font-weight: 800;
+      color: #34d399;
+      line-height: 1;
+    }
+    .price-pct {
+      display: inline-block;
+      background: linear-gradient(135deg, #059669, #34d399);
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 800;
+      padding: 6px 14px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+    .retailer-note {
+      font-size: 11px;
+      color: #475569;
+      margin-bottom: 16px;
+      font-style: italic;
+    }
+
+    /* CTA button */
+    .cta-wrap { text-align: center; margin-top: 4px; }
+    .cta-btn {
+      display: inline-block;
+      background: linear-gradient(135deg, #6c3fff, #a855f7);
+      color: #ffffff !important;
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 700;
+      padding: 14px 32px;
+      border-radius: 10px;
+      letter-spacing: 0.3px;
+    }
+
+    /* Divider */
+    .divider {
+      border: none;
+      border-top: 1px solid #2d2d3d;
+      margin: 8px 0 24px;
+    }
+
+    /* Footer */
+    .footer {
+      padding: 24px 40px;
+      border-top: 1px solid #2d2d3d;
+      text-align: center;
+    }
+    .footer p {
+      font-size: 12px;
+      color: #475569;
+      margin: 4px 0;
+      line-height: 1.6;
+    }
+    .footer a { color: #6c3fff; text-decoration: none; }
+
+    @media (max-width: 480px) {
+      .body-pad { padding: 24px 20px; }
+      .header { padding: 24px 20px; }
+      .footer { padding: 20px; }
+      .header-title { font-size: 22px; }
+      .price-new { font-size: 22px; }
+      .product-body { padding: 16px 16px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="container">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="header-logo">Wait &amp; Save</div>
+      <h1 class="header-title">{{headerTitle}}</h1>
+      <div class="header-subtitle">{{headerSubtitle}}</div>
+    </div>
+
+    <!-- Body -->
+    <div class="body-pad">
+      {{#if isDigest}}
+      <p class="digest-intro">
+        {{digestCount}} item{{#if multipleItems}}s{{/if}} you're watching
+        {{#if multipleItems}}have{{else}}has{{/if}} a new price update.
+      </p>
+      {{/if}}
+
+      <!-- PRODUCT CARDS INJECTED HERE -->
+      {{productCards}}
+
+    </div><!-- /body-pad -->
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>
+        You're receiving this because you starred items with
+        <strong>Wait &amp; Save</strong>.
+      </p>
+      <p>
+        <a href="{{unsubscribeUrl}}">Unsubscribe</a> &nbsp;·&nbsp;
+        <a href="{{dashboardUrl}}">View all tracked items</a>
+      </p>
+      <p style="margin-top: 12px; color: #334155;">
+        © {{year}} Wait &amp; Save &nbsp;·&nbsp; Prices shown are approximate and may vary.
+      </p>
+    </div>
+
+  </div><!-- /container -->
+</div><!-- /wrapper -->
+</body>
+</html>
