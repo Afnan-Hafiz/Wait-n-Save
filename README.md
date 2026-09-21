@@ -1,4 +1,4 @@
-# Wait & Save ⏳💰
+# Wait n Save 
 
 A browser extension + backend service that watches the products you care about and tells you exactly when it's worth buying.
 
