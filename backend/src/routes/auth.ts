@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import bcrypt from "bcrypt";
 import jwt, { type SignOptions } from "jsonwebtoken";
-import { randomBytes } from "crypto";
+import { randomBytes, randomInt } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { z } from "zod";
@@ -126,36 +126,54 @@ router.post(
     try {
       const { email } = ForgotSchema.parse(req.body);
 
-      // Always respond 200 — don't reveal if the email exists
+      // Look up user
       const users = await query<{ id: string; email: string }>(
         `SELECT id, email FROM users WHERE email = $1`,
-        [email.toLowerCase()]
+        [email.toLowerCase().trim()]
       );
 
+      let devCode: string | undefined = undefined;
+
       if (users[0]) {
-        const token = randomBytes(32).toString("hex");
+        // Generate a 6-digit numeric verification code
+        const code = randomInt(100000, 1000000).toString();
         const expires = new Date(Date.now() + RESET_EXPIRY_HOURS * 60 * 60 * 1000);
 
         await query(
           `UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3`,
-          [token, expires.toISOString(), users[0].id]
+          [code, expires.toISOString(), users[0].id]
         );
+
+        console.log(`[auth] 🔑 Password reset code for ${users[0].email}: ${code}`);
 
         const html = resetEmailTemplate
           .replace(/{{EMAIL}}/g, users[0].email)
-          .replace(/{{RESET_TOKEN}}/g, token);
+          .replace(/{{RESET_TOKEN}}/g, code);
 
-        const transport = getTransport();
-        await transport.sendMail({
-          from: `"${config.email.fromName}" <${config.email.gmailUser || "noreply@waitnsave.app"}>`,
-          to: users[0].email,
-          subject: "Reset your Wait-n-Save password",
-          html,
-        });
+        try {
+          const transport = getTransport();
+          await transport.sendMail({
+            from: `"${config.email.fromName}" <${config.email.gmailUser || "noreply@waitnsave.app"}>`,
+            to: users[0].email,
+            subject: `Wait-n-Save: Your Password Reset Code is ${code}`,
+            text: `Your password reset code for Wait-n-Save is: ${code}\n\nThis code will expire in 1 hour.`,
+            html,
+          });
+          console.log(`[auth] ✉️  Password reset email dispatched to ${users[0].email}`);
+        } catch (mailErr: any) {
+          console.warn(`[auth] ⚠️  SMTP email delivery failed:`, mailErr?.message || mailErr);
+        }
+
+        // Return devCode if SMTP credentials are not configured or in development
+        if (config.nodeEnv !== "production" || !config.email.gmailUser) {
+          devCode = code;
+        }
       }
 
-      // Generic response regardless of whether email matched
-      res.json({ message: "If that email is registered, a reset token has been sent." });
+      res.json({
+        message: "If that email is registered, a reset code has been sent.",
+        devCode,
+      });
     } catch (err) {
       next(err);
     }
@@ -164,7 +182,7 @@ router.post(
 
 // ── POST /api/auth/reset-password ────────────────────────────────────────────
 const ResetSchema = z.object({
-  token: z.string().min(1),
+  token: z.string().min(1, "Reset code is required"),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
@@ -173,23 +191,24 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { token, password } = ResetSchema.parse(req.body);
+      const cleanToken = token.trim().replace(/\s+/g, "");
 
       const users = await query<{ id: string; email: string; reset_token_expires: string }>(
         `SELECT id, email, reset_token_expires
          FROM users
-         WHERE reset_token = $1`,
-        [token]
+         WHERE LOWER(reset_token) = LOWER($1)`,
+        [cleanToken]
       );
 
       const user = users[0];
 
       if (!user) {
-        res.status(400).json({ error: "Invalid or expired reset token." });
+        res.status(400).json({ error: "Invalid reset code. Please check and try again." });
         return;
       }
 
       if (new Date(user.reset_token_expires) < new Date()) {
-        res.status(400).json({ error: "Reset token has expired. Please request a new one." });
+        res.status(400).json({ error: "Reset code has expired. Please request a new one." });
         return;
       }
 

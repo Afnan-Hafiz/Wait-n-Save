@@ -68,6 +68,20 @@ async function updateBadge(tabId: number, tracked: boolean): Promise<void> {
 // ── URL status cache (per-session, by tab) ────────────────────────────────────
 const urlStatusCache = new Map<string, boolean>();
 
+// ── Broadcast to all tabs ─────────────────────────────────────────────────────
+async function broadcastToTabs(msg: unknown): Promise<void> {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (tab.id) {
+        chrome.tabs.sendMessage(tab.id, msg).catch(() => {});
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 // ── Message handler ───────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener(
   (
@@ -103,6 +117,7 @@ async function handleMessage(
         userId: loginData.user.id,
         email: loginData.user.email,
       });
+      broadcastToTabs({ type: "AUTH_CHANGED", payload: { loggedIn: true } }).catch(() => {});
       return { success: true, data: loginData.user };
     }
 
@@ -110,6 +125,7 @@ async function handleMessage(
     case "LOGOUT": {
       await clearAuth();
       urlStatusCache.clear();
+      broadcastToTabs({ type: "AUTH_CHANGED", payload: { loggedIn: false } }).catch(() => {});
       return { success: true };
     }
 
@@ -147,6 +163,11 @@ async function handleMessage(
         await updateBadge(sender.tab.id, true);
         urlStatusCache.set(message.payload.productUrl, true);
       }
+
+      broadcastToTabs({
+        type: "ITEM_TRACKED",
+        payload: { url: message.payload.productUrl },
+      }).catch(() => {});
 
       return { success: true, data: result.data };
     }
@@ -203,7 +224,45 @@ async function handleMessage(
       );
       if (!result.ok) return { success: false, error: "Failed to untrack item" };
       urlStatusCache.clear(); // invalidate cache
-      return { success: true };
+
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (activeTab?.id) {
+        await updateBadge(activeTab.id, false);
+      }
+
+      const itemData = (result.data as { item?: { product_url?: string } })?.item;
+      broadcastToTabs({
+        type: "ITEM_UNTRACKED",
+        payload: { itemId: message.payload.itemId, url: itemData?.product_url },
+      }).catch(() => {});
+
+      return { success: true, data: result.data };
+    }
+
+    // ── Untrack item by URL directly ─────────────────────────────────────────
+    case "UNTRACK_URL": {
+      const auth = await getAuth();
+      if (!auth) return { success: false, error: "Not logged in" };
+
+      const result = await apiCall(
+        "POST",
+        "/api/items/untrack-by-url",
+        { url: message.payload.url },
+        auth.token
+      );
+      if (!result.ok) return { success: false, error: "Failed to untrack item" };
+      urlStatusCache.clear();
+
+      if (sender.tab?.id) {
+        await updateBadge(sender.tab.id, false);
+      }
+
+      broadcastToTabs({
+        type: "ITEM_UNTRACKED",
+        payload: { url: message.payload.url },
+      }).catch(() => {});
+
+      return { success: true, data: result.data };
     }
 
     // ── Forgot password ──────────────────────────────────────────────────
@@ -215,7 +274,7 @@ async function handleMessage(
         const errData = result.data as { error?: string };
         return { success: false, error: errData?.error ?? "Request failed" };
       }
-      return { success: true, data: (result.data as { message: string }).message };
+      return { success: true, data: result.data };
     }
 
     // ── Reset password ───────────────────────────────────────────────────
@@ -228,7 +287,7 @@ async function handleMessage(
         const errData = result.data as { error?: string };
         return { success: false, error: errData?.error ?? "Reset failed" };
       }
-      return { success: true, data: (result.data as { message: string }).message };
+      return { success: true, data: result.data };
     }
 
     default:

@@ -59,51 +59,31 @@ function showView(name: "login" | "register" | "forgot" | "reset" | "manual" | "
   document.body.classList.toggle("logged-in", name === "main" || name === "manual");
 }
 
-function formatCurrency(amount: string | null, currency: string): string {
-  if (!amount) return "—";
+function formatCurrencyParts(amount: string | null, currency: string): { sym: string; formatted: string } {
+  if (!amount) return { sym: "", formatted: "—" };
   const num = parseFloat(amount);
-  if (isNaN(num)) return "—";
+  if (isNaN(num)) return { sym: "", formatted: "—" };
   const code = (currency || "").trim().toUpperCase() || "USD";
 
   const SYMBOLS: Record<string, string> = {
-    BDT: "৳",
-    USD: "$",
-    EUR: "€",
-    GBP: "£",
-    INR: "₹",
-    JPY: "¥",
-    TRY: "₺",
-    KRW: "₩",
-    ILS: "₪",
-    PHP: "₱",
-    THB: "฿",
-    BRL: "R$",
-    CAD: "CA$",
-    AUD: "AU$",
+    BDT: "৳", USD: "$", EUR: "€", GBP: "£", INR: "₹", JPY: "¥",
+    TRY: "₺", KRW: "₩", ILS: "₪", PHP: "₱", THB: "฿", BRL: "R$",
+    CAD: "CA$", AUD: "AU$", SGD: "S$", MYR: "RM", IDR: "Rp",
   };
 
-  const sym = SYMBOLS[code];
+  const sym = SYMBOLS[code] ?? code;
   const hasDecimals = num % 1 !== 0;
-  const formattedNum = new Intl.NumberFormat(undefined, {
+  const formatted = new Intl.NumberFormat(undefined, {
     minimumFractionDigits: hasDecimals ? 2 : 0,
     maximumFractionDigits: 2,
   }).format(num);
 
-  if (sym) {
-    return `${sym} ${formattedNum}`;
-  }
+  return { sym, formatted };
+}
 
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: code,
-      currencyDisplay: "narrowSymbol",
-      minimumFractionDigits: hasDecimals ? 2 : 0,
-      maximumFractionDigits: 2,
-    }).format(num);
-  } catch {
-    return `${code} ${formattedNum}`;
-  }
+function formatCurrency(amount: string | null, currency: string): string {
+  const parts = formatCurrencyParts(amount, currency);
+  return parts.sym ? `${parts.sym} ${parts.formatted}` : parts.formatted;
 }
 
 function statusLabel(status: string): string {
@@ -118,16 +98,9 @@ function statusLabel(status: string): string {
   return map[status] ?? status;
 }
 
-function statusClass(status: string): string {
-  if (status === "ok") return "";
-  if (status === "delisted" || status === "login_gated") return "status-error";
-  return "status-blocked";
-}
-
 // ── Item card builder ──────────────────────────────────────────────────────────
 function buildItemCard(item: ApiItem): HTMLLIElement {
   const li = document.createElement("li");
-  li.className = "item-card";
   li.dataset["itemId"] = item.id;
 
   const origPrice = parseFloat(item.original_price);
@@ -135,41 +108,53 @@ function buildItemCard(item: ApiItem): HTMLLIElement {
   const pctOff = item.pct_off ? parseInt(item.pct_off, 10) : null;
   const priceDropped = currPrice !== null && currPrice < origPrice;
 
-  const thumb = item.image_url
-    ? `<img class="item-thumb" src="${item.image_url}" alt="" loading="lazy" />`
+  // Status badges: Target Reached (>=10% drop or lowest) vs Price Dropped vs Watching
+  const isTarget = pctOff !== null && pctOff >= 10;
+  li.className = isTarget ? "item-card card-target" : "item-card";
+
+  let statusBadgeHtml = "";
+  if (isTarget) {
+    statusBadgeHtml = `<div class="card-status-row"><span class="badge-status badge-target">Target Reached</span></div>`;
+  } else if (priceDropped && pctOff !== null && pctOff > 0) {
+    statusBadgeHtml = `<div class="card-status-row"><span class="badge-status badge-dropped">Price Dropped — ${pctOff}%</span></div>`;
+  } else {
+    statusBadgeHtml = `<div class="card-status-row"><span class="badge-status badge-watching">Watching...</span></div>`;
+  }
+
+  const thumbImg = item.image_url
+    ? `<img class="item-thumb" src="${item.image_url}" alt="${item.title ?? ""}" loading="lazy" />`
     : `<div class="item-thumb-placeholder">🛍️</div>`;
 
-  const currPriceHtml = currPrice !== null
-    ? `<span class="price-current ${priceDropped ? "" : "same"}">${formatCurrency(String(currPrice), item.currency)}</span>
-       ${pctOff && pctOff > 0 ? `<span class="pct-badge">-${pctOff}%</span>` : ""}`
-    : `<span class="price-current same">Not checked yet</span>`;
+  const thumbBoxHtml = isTarget
+    ? `<div class="item-thumb-box">${thumbImg}<div class="target-ping-dot"></div><div class="target-solid-dot"></div></div>`
+    : `<div class="item-thumb-box">${thumbImg}</div>`;
 
-  const statusText = statusLabel(item.fetch_status);
-  const statusHtml = statusText
-    ? `<div class="item-status ${statusClass(item.fetch_status)}">${statusText}</div>`
-    : "";
+  const currParts = formatCurrencyParts(item.current_price, item.currency);
+  const origParts = formatCurrencyParts(item.original_price, item.currency);
+
+  const currPriceHtml = currPrice !== null
+    ? `<span class="price-current-group ${priceDropped ? "price-dropped-gold wns-shimmer" : ""}">${currParts.sym} ${currParts.formatted}</span>`
+    : `<span class="price-current-group" style="font-size:13px;color:var(--muted-foreground)">Not checked</span>`;
 
   const variantHint = item.variant_hint
     ? Object.entries(item.variant_hint).map(([k, v]) => `${k}: ${v}`).join(", ")
     : "";
 
   li.innerHTML = `
-    ${thumb}
+    ${thumbBoxHtml}
     <div class="item-body">
+      ${statusBadgeHtml}
       <a class="item-title" href="${item.product_url}" target="_blank" rel="noopener noreferrer"
          title="${item.title ?? item.product_url}">
         ${item.title ?? item.product_url}
-        ${variantHint ? `<span style="color:var(--text-dim);font-weight:400"> (${variantHint})</span>` : ""}
+        ${variantHint ? `<span style="color:var(--muted-foreground);font-weight:400"> (${variantHint})</span>` : ""}
       </a>
       <div class="item-prices">
-        ${priceDropped ? `<span class="price-original">${formatCurrency(item.original_price, item.currency)}</span>` : ""}
         ${currPriceHtml}
+        ${priceDropped ? `<span class="price-original">${origParts.sym} ${origParts.formatted}</span>` : ""}
       </div>
-      ${statusHtml}
     </div>
-    <div class="item-actions">
-      <button class="btn-untrack" data-item-id="${item.id}" aria-label="Untrack">✕</button>
-    </div>
+    <button class="btn-untrack" data-item-id="${item.id}" aria-label="Remove item" title="Remove item">✕</button>
   `;
 
   return li;
@@ -197,7 +182,7 @@ async function loadItems(): Promise<void> {
   const items = resp.data as ApiItem[];
   const active = items.filter((i) => i.is_active);
 
-  countBadge.textContent = String(active.length);
+  countBadge.textContent = String(active.length).padStart(2, "0");
 
   if (active.length === 0) {
     empty.classList.remove("hidden");
@@ -220,8 +205,9 @@ async function loadItems(): Promise<void> {
     if (delResp.success) {
       btn.closest(".item-card")?.remove();
       const count = list.querySelectorAll(".item-card").length;
-      countBadge.textContent = String(count);
+      countBadge.textContent = String(count).padStart(2, "0");
       if (count === 0) empty.classList.remove("hidden");
+      await checkCurrentPage();
     } else {
       btn.disabled = false;
       btn.textContent = "✕";
@@ -235,10 +221,16 @@ async function checkCurrentPage(): Promise<void> {
   const barText = $("page-bar-text");
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.url || !tab.url.startsWith("http")) return;
+  if (!tab?.url || !tab.url.startsWith("http")) {
+    bar.classList.add("hidden");
+    return;
+  }
 
   const resp = await sendMessage({ type: "CHECK_URL", payload: { url: tab.url } });
-  if (!resp.success) return;
+  if (!resp.success) {
+    bar.classList.add("hidden");
+    return;
+  }
 
   const data = resp.data as { tracked: boolean; blockedDomain: boolean; item?: { fetch_status: string } };
 
@@ -250,12 +242,15 @@ async function checkCurrentPage(): Promise<void> {
     bar.className = "page-bar tracked";
     barText.textContent = "✓ Tracking this page";
     bar.classList.remove("hidden");
+  } else {
+    bar.classList.add("hidden");
   }
 }
 
 async function handleForgotPassword(e: Event): Promise<void> {
   e.preventDefault();
-  const email = ($('forgot-email') as HTMLInputElement).value.trim();
+  const emailInput = $('forgot-email') as HTMLInputElement;
+  const email = emailInput.value.trim();
   const errEl = $('forgot-error');
   const successEl = $('forgot-success');
   const btn = $('btn-forgot') as HTMLButtonElement;
@@ -263,16 +258,43 @@ async function handleForgotPassword(e: Event): Promise<void> {
   errEl.textContent = '';
   successEl.classList.add('hidden');
   successEl.textContent = '';
+
+  if (!email) {
+    errEl.textContent = 'Please enter your email address.';
+    return;
+  }
+
   btn.disabled = true;
   btn.textContent = 'Sending…';
 
   const resp = await sendMessage({ type: 'FORGOT_PASSWORD', payload: { email } });
   btn.disabled = false;
-  btn.textContent = 'Send Reset Token';
+  btn.textContent = 'SEND RESET CODE';
 
   if (resp.success) {
-    successEl.textContent = '✅ Check your email for a reset token. Also check your spam folder.';
-    successEl.classList.remove('hidden');
+    const data = resp.data as { message?: string; devCode?: string } | string;
+    const devCode = typeof data === 'object' ? data?.devCode : undefined;
+
+    // Transition straight to the reset code view
+    showView('reset');
+
+    const resetTokenInput = $('reset-token') as HTMLInputElement;
+    if (devCode) {
+      resetTokenInput.value = devCode;
+    } else {
+      resetTokenInput.value = '';
+    }
+
+    const resetErrEl = $('reset-error');
+    resetErrEl.style.color = '#10B981';
+    resetErrEl.textContent = devCode
+      ? `✅ Verification code generated! (Dev code: ${devCode})`
+      : `✅ Verification code sent to ${email}! Enter it below.`;
+
+    setTimeout(() => {
+      resetErrEl.textContent = '';
+      resetErrEl.style.color = '';
+    }, 8000);
   } else {
     errEl.textContent = resp.error ?? 'Something went wrong. Try again.';
   }
@@ -286,8 +308,13 @@ async function handleResetPassword(e: Event): Promise<void> {
   const errEl = $('reset-error');
   const btn = $('btn-reset') as HTMLButtonElement;
 
+  errEl.style.color = '';
   errEl.textContent = '';
 
+  if (!token) {
+    errEl.textContent = 'Please enter the verification code.';
+    return;
+  }
   if (password !== confirm) {
     errEl.textContent = 'Passwords do not match.';
     return;
@@ -302,24 +329,30 @@ async function handleResetPassword(e: Event): Promise<void> {
 
   const resp = await sendMessage({ type: 'RESET_PASSWORD', payload: { token, password } });
   btn.disabled = false;
-  btn.textContent = 'Set New Password';
+  btn.textContent = 'CHANGE PASSWORD';
 
   if (resp.success) {
-    // Success — show login with a hint
-    ($('email') as HTMLInputElement).value = '';
+    // Fill the email in login form if available
+    const forgotEmail = ($('forgot-email') as HTMLInputElement).value.trim();
+    if (forgotEmail) {
+      ($('email') as HTMLInputElement).value = forgotEmail;
+    }
     ($('password') as HTMLInputElement).value = '';
-    $('login-error').textContent = '';
+    ($('reset-token') as HTMLInputElement).value = '';
+    ($('reset-password') as HTMLInputElement).value = '';
+    ($('reset-confirm') as HTMLInputElement).value = '';
+
     showView('login');
-    // Flash a brief success note
-    const errLoginEl = $('login-error');
-    errLoginEl.style.color = 'var(--green)';
-    errLoginEl.textContent = '✅ Password updated! Sign in with your new password.';
+
+    const loginErrEl = $('login-error');
+    loginErrEl.style.color = '#10B981';
+    loginErrEl.textContent = '✅ Password updated! Sign in with your new password.';
     setTimeout(() => {
-      errLoginEl.textContent = '';
-      errLoginEl.style.color = '';
-    }, 5000);
+      loginErrEl.textContent = '';
+      loginErrEl.style.color = '';
+    }, 6000);
   } else {
-    errEl.textContent = resp.error ?? 'Reset failed. Check your token and try again.';
+    errEl.textContent = resp.error ?? 'Reset failed. Check your code and try again.';
   }
 }
 

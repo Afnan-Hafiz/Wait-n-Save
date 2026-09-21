@@ -222,15 +222,29 @@ export function detectCurrencyFromHostname(hostname: string): string | null {
 
 // ── CSS selector heuristics ───────────────────────────────────────────────────
 const PRICE_SELECTORS = [
+  // Amazon specific selectors (buyboxes, apex, deals)
+  "#corePriceDisplay_desktop_feature_div .a-price .a-offscreen",
+  "#corePrice_desktop .a-price .a-offscreen",
+  "#apex_desktop .a-price .a-offscreen",
+  ".apexPriceToPay .a-offscreen",
+  "#price_inside_buybox",
+  "#priceblock_ourprice",
+  "#priceblock_dealprice",
+  "#priceblock_saleprice",
+  "#newAccordionRow .a-price .a-offscreen",
+  "#sns-base-price",
+  ".a-price.aok-align-center .a-offscreen",
+  ".a-price .a-offscreen",
+  // Generic e-commerce & major platforms
   '[data-testid="price"]',
   '[data-automation="buybox-price"]',
   ".price--highlight", ".price__current", ".price-current",
   ".product-price", ".sale-price", ".offer-price",
-  "#priceblock_ourprice", "#priceblock_dealprice",
-  ".a-price .a-offscreen",
+  ".pdp-price", ".pdp-product-price",
+  ".price-new", ".p-price", ".current-price",
   '[class*="price"][class*="sale"]',
   '[class*="current"][class*="price"]',
-  ".pdp-price", ".PriceRange",
+  ".PriceRange",
 ];
 
 function extractFromSelectors(): { price: number | null; currency: string | null } {
@@ -287,12 +301,9 @@ function extractVariantHint(): Record<string, string> | null {
 // ── Title extraction ──────────────────────────────────────────────────────────
 function extractTitle(): string | null {
   return (
-    document
-      .querySelector('[itemprop="name"]')
-      ?.textContent?.trim() ??
-    document
-      .querySelector('meta[property="og:title"]')
-      ?.getAttribute("content") ??
+    document.querySelector("#productTitle")?.textContent?.trim() ??
+    document.querySelector('[itemprop="name"]')?.textContent?.trim() ??
+    document.querySelector('meta[property="og:title"]')?.getAttribute("content") ??
     document.title?.trim() ??
     null
   );
@@ -300,6 +311,13 @@ function extractTitle(): string | null {
 
 // ── Image extraction ──────────────────────────────────────────────────────────
 function extractImage(): string | null {
+  // Amazon main landing images
+  const landingImg = (document.querySelector("#landingImage") as HTMLImageElement)?.src;
+  if (landingImg && !landingImg.startsWith("data:")) return landingImg;
+
+  const mainImg = (document.querySelector("#imgBlkFront") as HTMLImageElement)?.src;
+  if (mainImg && !mainImg.startsWith("data:")) return mainImg;
+
   const og = document
     .querySelector('meta[property="og:image"]')
     ?.getAttribute("content");
