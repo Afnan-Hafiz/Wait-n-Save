@@ -18,7 +18,37 @@ const TOAST_ID = "wns-toast";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function sendMessage(msg: Message): Promise<MessageResponse> {
-  return chrome.runtime.sendMessage(msg);
+  return new Promise((resolve) => {
+    try {
+      if (!chrome?.runtime?.id) {
+        resolve({
+          success: false,
+          error: "Extension was reloaded. Please refresh the page.",
+        });
+        return;
+      }
+      chrome.runtime.sendMessage(msg, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({
+            success: false,
+            error: chrome.runtime.lastError.message || "Failed to communicate with extension",
+          });
+        } else if (!response) {
+          resolve({
+            success: false,
+            error: "No response from extension background worker.",
+          });
+        } else {
+          resolve(response);
+        }
+      });
+    } catch (err) {
+      resolve({
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
 }
 
 function isProductPage(): boolean {
@@ -85,88 +115,109 @@ function isProductPage(): boolean {
 
 // ── Button injection ──────────────────────────────────────────────────────────
 function injectButton(): HTMLButtonElement {
-  if (document.getElementById(BUTTON_ID)) {
-    return document.getElementById(BUTTON_ID) as HTMLButtonElement;
-  }
+  let btn = document.getElementById(BUTTON_ID) as HTMLButtonElement | null;
+  if (btn) return btn;
 
   // Styles injected inline so they work regardless of page CSS
-  const style = document.createElement("style");
-  style.textContent = `
-    #${BUTTON_ID} {
-      all: initial;
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      z-index: 2147483647;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: linear-gradient(135deg, #6c3fff, #a855f7);
-      color: #fff;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      font-weight: 600;
-      padding: 10px 18px;
-      border-radius: 100px;
-      border: none;
-      cursor: pointer;
-      box-shadow: 0 4px 24px rgba(108, 63, 255, 0.45);
-      transition: all 0.2s ease;
-      letter-spacing: 0.2px;
-      white-space: nowrap;
-    }
-    #${BUTTON_ID}:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 32px rgba(108, 63, 255, 0.55);
-    }
-    #${BUTTON_ID}:active { transform: translateY(0); }
-    #${BUTTON_ID}.wns-tracked {
-      background: linear-gradient(135deg, #059669, #34d399);
-      box-shadow: 0 4px 24px rgba(52, 211, 153, 0.35);
-    }
-    #${BUTTON_ID}.wns-loading { opacity: 0.7; cursor: wait; }
-    #${TOAST_ID} {
-      all: initial;
-      position: fixed;
-      bottom: 80px;
-      right: 24px;
-      z-index: 2147483647;
-      background: #1a1a24;
-      color: #f1f5f9;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 13px;
-      font-weight: 500;
-      padding: 10px 16px;
-      border-radius: 10px;
-      border: 1px solid #2d2d3d;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-      opacity: 0;
-      transform: translateY(8px);
-      transition: all 0.25s ease;
-      pointer-events: none;
-    }
-    #${TOAST_ID}.wns-show { opacity: 1; transform: translateY(0); }
-  `;
-  document.head.appendChild(style);
+  if (!document.getElementById("wns-styles")) {
+    const style = document.createElement("style");
+    style.id = "wns-styles";
+    style.textContent = `
+      #${BUTTON_ID} {
+        all: initial;
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        background: #0B0C10;
+        color: #FFFFFF;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        padding: 10px 18px;
+        border-radius: 100px;
+        border: 1px solid rgba(229, 169, 60, 0.45);
+        cursor: pointer;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 14px rgba(229, 169, 60, 0.2);
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        white-space: nowrap;
+        user-select: none;
+        box-sizing: border-box;
+        line-height: normal;
+      }
+      #${BUTTON_ID}:hover {
+        transform: translateY(-2px);
+        border-color: #E5A93C;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.7), 0 0 20px rgba(229, 169, 60, 0.35);
+      }
+      #${BUTTON_ID}:active { transform: translateY(0); }
+      #${BUTTON_ID}.wns-tracked {
+        background: #0B0C10;
+        border-color: #22C55E;
+        color: #4ADE80;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 16px rgba(34, 197, 94, 0.25);
+      }
+      #${BUTTON_ID}.wns-loading { opacity: 0.75; cursor: wait; pointer-events: none; }
+      #${TOAST_ID} {
+        all: initial;
+        position: fixed;
+        bottom: 84px;
+        right: 24px;
+        z-index: 2147483647;
+        background: #13151E;
+        color: #FFFFFF;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 12px 18px;
+        border-radius: 10px;
+        border: 1px solid rgba(229, 169, 60, 0.3);
+        box-shadow: 0 10px 36px rgba(0, 0, 0, 0.7), 0 0 16px rgba(229, 169, 60, 0.15);
+        opacity: 0;
+        transform: translateY(8px);
+        transition: all 0.25s ease;
+        pointer-events: none;
+        max-width: 320px;
+        line-height: 1.4;
+        box-sizing: border-box;
+      }
+      #${TOAST_ID}.wns-show { opacity: 1; transform: translateY(0); }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
 
-  const btn = document.createElement("button");
+  btn = document.createElement("button");
   btn.id = BUTTON_ID;
   btn.innerHTML = "⭐ Star this item";
-  document.body.appendChild(btn);
+  (document.body || document.documentElement).appendChild(btn);
 
-  const toast = document.createElement("div");
-  toast.id = TOAST_ID;
-  document.body.appendChild(toast);
+  if (!document.getElementById(TOAST_ID)) {
+    const toast = document.createElement("div");
+    toast.id = TOAST_ID;
+    (document.body || document.documentElement).appendChild(toast);
+  }
+
+  // Attach persistent click handler immediately
+  btn.addEventListener("click", () => void handleButtonClick(btn!));
 
   return btn;
 }
 
-function showToast(message: string, durationMs = 3000): void {
+function showToast(message: string, durationMs = 3500): void {
   const toast = document.getElementById(TOAST_ID);
   if (!toast) return;
   toast.textContent = message;
   toast.classList.add("wns-show");
-  setTimeout(() => toast.classList.remove("wns-show"), durationMs);
+
+  const existingTimer = (toast as unknown as { _timer?: ReturnType<typeof setTimeout> })._timer;
+  if (existingTimer) clearTimeout(existingTimer);
+  (toast as unknown as { _timer?: ReturnType<typeof setTimeout> })._timer = setTimeout(() => {
+    toast.classList.remove("wns-show");
+  }, durationMs);
 }
 
 function setButtonState(
@@ -191,92 +242,167 @@ function setButtonState(
   }
 }
 
-// ── Main logic ────────────────────────────────────────────────────────────────
-async function init(): Promise<void> {
-  if (!isProductPage()) return;
+// ── Check tracking and auth status ───────────────────────────────────────────
+async function checkStatus(btn: HTMLButtonElement): Promise<void> {
+  try {
+    const authResp = await sendMessage({ type: "GET_AUTH" });
+    if (!authResp.success || !authResp.data) {
+      if (!btn.classList.contains("wns-loading")) {
+        setButtonState(btn, "login_needed");
+      }
+      return;
+    }
 
-  const btn = injectButton();
-
-  // ── Check auth state ─────────────────────────────────────────────────────
-  const authResp = await sendMessage({ type: "GET_AUTH" });
-  if (!authResp.success || !authResp.data) {
-    setButtonState(btn, "login_needed");
-    btn.addEventListener("click", () => {
-      chrome.runtime.openOptionsPage?.();
-      // Open popup as fallback
-      showToast("Click the Wait-n-Save icon to sign in first.");
+    const checkResp = await sendMessage({
+      type: "CHECK_URL",
+      payload: { url: window.location.href },
     });
+
+    if (checkResp.success) {
+      const statusData = checkResp.data as { tracked: boolean };
+      if (statusData?.tracked) {
+        setButtonState(btn, "tracked");
+      } else {
+        setButtonState(btn, "untracked");
+      }
+    }
+  } catch (err) {
+    console.debug("[Wait-n-Save] checkStatus error:", err);
+  }
+}
+
+// ── Button Click Handler ──────────────────────────────────────────────────────
+async function handleButtonClick(btn: HTMLButtonElement): Promise<void> {
+  if (btn.classList.contains("wns-loading")) return;
+
+  // 1. If currently tracked, clicking removes it
+  if (btn.classList.contains("wns-tracked")) {
+    setButtonState(btn, "loading");
+    const untrackResp = await sendMessage({
+      type: "UNTRACK_URL",
+      payload: { url: window.location.href },
+    });
+    if (untrackResp.success) {
+      setButtonState(btn, "untracked");
+      showToast("🗑️ Removed from Price Watch");
+    } else {
+      setButtonState(btn, "tracked");
+      showToast(`❌ ${untrackResp.error ?? "Failed to remove item"}`);
+    }
     return;
   }
 
-  // ── Check if current URL is already tracked ──────────────────────────────
-  const checkResp = await sendMessage({
-    type: "CHECK_URL",
-    payload: { url: window.location.href },
-  });
+  // 2. User wants to star this item: check auth first
+  setButtonState(btn, "loading");
 
-  if (checkResp.success) {
-    const statusData = checkResp.data as { tracked: boolean };
-    if (statusData.tracked) {
-      setButtonState(btn, "tracked");
-    }
+  const authResp = await sendMessage({ type: "GET_AUTH" });
+  if (!authResp.success || !authResp.data) {
+    setButtonState(btn, "login_needed");
+    showToast("⭐ Please click the Wait-n-Save extension icon in your toolbar to sign in first.", 4500);
+    return;
   }
 
-  // ── Star button click handler ────────────────────────────────────────────
-  btn.addEventListener("click", async () => {
-    if (btn.classList.contains("wns-tracked")) {
-      showToast("✓ Already tracking this item.");
-      return;
-    }
+  // Extract live product from DOM
+  let product;
+  try {
+    product = extractProduct();
+  } catch (err) {
+    console.error("[Wait-n-Save] Extractor error:", err);
+    setButtonState(btn, "untracked");
+    showToast("⚠️ Failed to parse product details from page.", 3500);
+    return;
+  }
 
-    setButtonState(btn, "loading");
+  if (!product || product.price === null || isNaN(product.price) || product.price <= 0) {
+    setButtonState(btn, "untracked");
+    showToast("⚠️ Couldn't detect a price on this page. Try selecting a variant or size first.", 4000);
+    return;
+  }
 
-    const product = extractProduct();
+  let currency = (product.currency || "").trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    currency = "USD";
+  }
 
-    if (product.price === null) {
-      showToast("⚠️ Couldn't detect a price on this page. Try selecting a variant first.");
-      setButtonState(btn, "untracked");
-      return;
-    }
+  const response = await sendMessage({
+    type: "STAR_ITEM",
+    payload: {
+      productUrl: window.location.href,
+      title: product.title || document.title || "Tracked Product",
+      imageUrl: product.imageUrl,
+      price: product.price,
+      currency,
+      geoHint: navigator.language || "en",
+      variantHint: product.variantHint,
+    },
+  });
 
-    const response = await sendMessage({
-      type: "STAR_ITEM",
-      payload: {
-        productUrl: window.location.href,
-        title: product.title,
-        imageUrl: product.imageUrl,
-        price: product.price,
-        currency: product.currency ?? "USD",
-        geoHint: navigator.language,
-        variantHint: product.variantHint,
-      },
-    });
+  if (response.success) {
+    setButtonState(btn, "tracked");
+    const SYMBOLS: Record<string, string> = {
+      BDT: "৳", USD: "$", EUR: "€", GBP: "£", INR: "₹", JPY: "¥",
+      TRY: "₺", KRW: "₩", CAD: "CA$", AUD: "AU$",
+    };
+    const sym = SYMBOLS[currency];
+    const num = product.price;
+    const formattedNum = new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: num % 1 !== 0 ? 2 : 0,
+      maximumFractionDigits: 2,
+    }).format(num);
+    const formattedPrice = sym ? `${sym} ${formattedNum}` : `${currency} ${formattedNum}`;
+    showToast(`✅ Tracking "${product.title ?? "this item"}" at ${formattedPrice}`, 3500);
+  } else {
+    setButtonState(btn, "untracked");
+    showToast(`❌ ${response.error ?? "Failed to save. Try again."}`, 4000);
+  }
+}
 
-    if (response.success) {
-      setButtonState(btn, "tracked");
-      const currency = product.currency ?? "USD";
-      const SYMBOLS: Record<string, string> = {
-        BDT: "৳", USD: "$", EUR: "€", GBP: "£", INR: "₹", JPY: "¥",
-        TRY: "₺", KRW: "₩", CAD: "CA$", AUD: "AU$",
-      };
-      const sym = SYMBOLS[currency];
-      const num = product.price!;
-      const formattedNum = new Intl.NumberFormat(undefined, {
-        minimumFractionDigits: num % 1 !== 0 ? 2 : 0,
-        maximumFractionDigits: 2,
-      }).format(num);
-      const formattedPrice = sym ? `${sym} ${formattedNum}` : `${currency} ${formattedNum}`;
-      showToast(`✅ Tracking "${product.title ?? "this item"}" at ${formattedPrice}`);
-    } else {
-      setButtonState(btn, "untracked");
-      showToast(`❌ ${response.error ?? "Failed to save. Try again."}`);
+// ── Main initialization ───────────────────────────────────────────────────────
+function init(): void {
+  if (!isProductPage()) return;
+
+  const btn = injectButton();
+  void checkStatus(btn);
+
+  // ── Listen for real-time messages from popup or background ─────────────────
+  chrome.runtime.onMessage.addListener((msg: unknown) => {
+    const m = msg as { type?: string; payload?: { url?: string } };
+    const curBtn = document.getElementById(BUTTON_ID) as HTMLButtonElement | null;
+    if (!curBtn) return;
+
+    if (m?.type === "ITEM_UNTRACKED" || m?.type === "ITEM_TRACKED" || m?.type === "AUTH_CHANGED") {
+      void checkStatus(curBtn);
     }
   });
+
+  // ── Listen for storage auth changes (e.g. login/logout in popup) ───────────
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes["auth"]) {
+        const curBtn = document.getElementById(BUTTON_ID) as HTMLButtonElement | null;
+        if (curBtn) void checkStatus(curBtn);
+      }
+    });
+  } catch {
+    // Ignore if storage listener not supported in this context
+  }
 }
 
-// Run after DOM is ready
+// ── Startup & SPA navigation observer ─────────────────────────────────────────
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => void init());
+  document.addEventListener("DOMContentLoaded", () => init());
 } else {
-  void init();
+  init();
 }
+
+// Watch for client-side URL changes (SPA transitions on Amazon, Shopify, etc.)
+let lastUrl = window.location.href;
+setInterval(() => {
+  if (window.location.href !== lastUrl) {
+    lastUrl = window.location.href;
+    if (isProductPage()) {
+      const btn = injectButton();
+      void checkStatus(btn);
+    }
+  }
+}, 1500);

@@ -56,7 +56,8 @@ export type Message =
   | { type: "GET_AUTH" }
   | { type: "GET_TAB_URL" }
   | { type: "GET_ITEMS" }
-  | { type: "DELETE_ITEM"; payload: { itemId: string } };
+  | { type: "DELETE_ITEM"; payload: { itemId: string } }
+  | { type: "UNTRACK_URL"; payload: { url: string } };
 
 export type MessageResponse =
   | { success: true; data?: unknown }

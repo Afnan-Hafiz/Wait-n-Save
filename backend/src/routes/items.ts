@@ -13,11 +13,11 @@ router.use(requireAuth);
 const StarItemSchema = z.object({
   productUrl: z.string().url(),
   title: z.string().nullish(),
-  imageUrl: z.string().url().nullish(),
+  imageUrl: z.string().nullish(),
   price: z.number().positive(),
-  currency: z.string().length(3).default("USD"),
+  currency: z.string().nullish().transform((c) => (c && c.trim().length >= 3 ? c.trim().toUpperCase().slice(0, 3) : "USD")),
   geoHint: z.string().nullish(),
-  variantHint: z.record(z.string()).nullish(),
+  variantHint: z.record(z.any()).nullish(),
 });
 
 // ── POST /api/items — Star a new item ─────────────────────────────────────────
@@ -137,13 +137,13 @@ router.get(
       }>(
         `SELECT id, is_active, fetch_status, current_price, original_price
          FROM tracked_items
-         WHERE user_id = $1 AND product_key = $2`,
+         WHERE user_id = $1 AND product_key = $2 AND is_active = true`,
         [req.auth!.userId, productKey]
       );
 
       const blocked = checkBlockedDomain(rawUrl);
       res.json({
-        tracked: rows.length > 0,
+        tracked: rows.length > 0 && rows[0].is_active === true,
         item: rows[0] ?? null,
         blockedDomain: blocked.blocked,
         apiAlternative: blocked.apiAlternative ?? null,
@@ -223,17 +223,45 @@ router.delete(
   "/:id",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await query<{ id: string }>(
+      const result = await query<{ id: string; product_url: string }>(
         `UPDATE tracked_items SET is_active = false
          WHERE id = $1 AND user_id = $2
-         RETURNING id`,
+         RETURNING id, product_url`,
         [req.params["id"], req.auth!.userId]
       );
       if (!result[0]) {
         res.status(404).json({ error: "Item not found" });
         return;
       }
-      res.json({ success: true });
+      res.json({ success: true, item: result[0] });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── POST /api/items/untrack-by-url — Untrack directly from page by URL ────────
+router.post(
+  "/untrack-by-url",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const rawUrl = req.body?.url;
+      if (!rawUrl || typeof rawUrl !== "string") {
+        res.status(400).json({ error: "Invalid URL" });
+        return;
+      }
+      const productKey = normalizeUrl(rawUrl);
+      const result = await query<{ id: string; product_url: string }>(
+        `UPDATE tracked_items SET is_active = false
+         WHERE user_id = $1 AND product_key = $2 AND is_active = true
+         RETURNING id, product_url`,
+        [req.auth!.userId, productKey]
+      );
+      if (!result[0]) {
+        res.status(404).json({ error: "Item not currently tracked" });
+        return;
+      }
+      res.json({ success: true, item: result[0] });
     } catch (err) {
       next(err);
     }
