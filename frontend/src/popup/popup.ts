@@ -289,7 +289,7 @@ async function handleForgotPassword(e: Event): Promise<void> {
     resetErrEl.style.color = '#10B981';
     resetErrEl.textContent = devCode
       ? `✅ Verification code generated! (Dev code: ${devCode})`
-      : `✅ Verification code sent to ${email}! Enter it below.`;
+      : `✅ Verification code sent to ${email}! (Check Spam/Junk if not in Inbox)`;
 
     setTimeout(() => {
       resetErrEl.textContent = '';

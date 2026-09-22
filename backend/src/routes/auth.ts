@@ -8,7 +8,7 @@ import { z } from "zod";
 import { query } from "../db/client";
 import { requireAuth } from "../middleware/auth";
 import { config } from "../config";
-import { getTransport } from "../services/mailer";
+import { sendEmail } from "../services/mailer";
 
 const RESET_EXPIRY_HOURS = 1;
 const resetEmailTemplate = readFileSync(
@@ -151,21 +151,23 @@ router.post(
           .replace(/{{RESET_TOKEN}}/g, code);
 
         try {
-          const transport = getTransport();
-          await transport.sendMail({
-            from: `"${config.email.fromName}" <${config.email.gmailUser || "noreply@waitnsave.app"}>`,
+          await sendEmail({
             to: users[0].email,
             subject: `Wait-n-Save: Your Password Reset Code is ${code}`,
-            text: `Your password reset code for Wait-n-Save is: ${code}\n\nThis code will expire in 1 hour.`,
             html,
+            text: `Your password reset code for Wait-n-Save is: ${code}\n\nThis code will expire in 1 hour.`,
           });
           console.log(`[auth] ✉️  Password reset email dispatched to ${users[0].email}`);
         } catch (mailErr: any) {
-          console.warn(`[auth] ⚠️  SMTP email delivery failed:`, mailErr?.message || mailErr);
+          console.warn(`[auth] ⚠️  Email delivery failed:`, mailErr?.message || mailErr);
         }
 
-        // Return devCode if SMTP credentials are not configured or in development
-        if (config.nodeEnv !== "production" || !config.email.gmailUser) {
+        // Only return devCode if no real email service is configured (pure console fallback)
+        const hasRealEmail = Boolean(
+          config.email.resendApiKey ||
+          (config.email.gmailUser && config.email.gmailAppPassword)
+        );
+        if (!hasRealEmail) {
           devCode = code;
         }
       }

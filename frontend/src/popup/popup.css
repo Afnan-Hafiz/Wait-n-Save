@@ -26,6 +26,11 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+/* ── Logo color spans ────────────────────────────────────────────────────────── */
+.logo-wait { color: #6ee7b7; }
+.logo-n    { color: #ffffff; }
+.logo-save { color: #6ee7b7; }
+
 html, body {
   width: 380px;
   min-height: 500px;
@@ -672,6 +677,22 @@ body.logged-in #btn-logout { display: flex; }
   background: oklch(0.77 0.15 150 / 0.1);
   border: 1px solid oklch(0.77 0.15 150 / 0.2);
   border-radius: 6px;
+}
+
+.notice-box {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #fbbf24;
+  text-align: left;
+}
+
+.notice-box strong {
+  color: #ffffff;
 }
 
 .register-prompt {
