@@ -71,6 +71,11 @@ export async function sendEmail(opts: {
       subject: opts.subject,
       html: opts.html,
       text: opts.text,
+      replyTo: opts.to,
+      headers: {
+        "X-Entity-Ref-ID": Date.now().toString(),
+        "Auto-Submitted": "auto-generated",
+      },
     });
     if (error) throw new Error(`Resend error: ${error.message}`);
     console.log(`[mailer] ✅ Email sent via Resend to ${opts.to}`);
@@ -96,10 +101,7 @@ const TEMPLATE_PATH = path.join(__dirname, "../templates/priceAlert.html");
 let templateCache: string | null = null;
 
 function getTemplate(): string {
-  if (!templateCache) {
-    templateCache = fs.readFileSync(TEMPLATE_PATH, "utf8");
-  }
-  return templateCache;
+  return fs.readFileSync(TEMPLATE_PATH, "utf8");
 }
 
 // ── HTML helpers ──────────────────────────────────────────────────────────────
@@ -237,15 +239,36 @@ export async function sendDigest(
     .replace(/{{#if multipleItems}}s{{\/if}}/g, isMultiple ? "s" : "")
     .replace(/{{#if multipleItems}}have{{else}}has{{\/if}}/g, isMultiple ? "have" : "has")
     .replace(/{{productCards}}/g, productCards)
-    .replace(/{{unsubscribeUrl}}/g, `${baseUrl}/unsubscribe`)
-    .replace(/{{dashboardUrl}}/g, `${baseUrl}/dashboard`)
     .replace(/{{year}}/g, String(new Date().getFullYear()));
 
   const subject = isMultiple
-    ? `💸 ${events.length} price alerts — Wait-n-Save`
-    : `${EVENT_BADGE_LABELS[events[0].eventType] ?? "Price alert"}: ${events[0].title ?? "tracked item"}`;
+    ? `Wait-n-Save: ${events.length} Price Alerts for your tracked items`
+    : `Wait-n-Save Price Alert: ${events[0].title ?? "tracked item"}`;
 
-  await sendEmail({ to: recipient.email, subject, html });
+  const textLines = [
+    `Wait-n-Save Price Alert`,
+    `========================`,
+    ``,
+    headerSubtitle,
+    ``,
+    ...events.map((ev, i) => {
+      const oldPrice = formatCurrency(ev.originalPrice, ev.currency);
+      const newPrice = ev.newPrice !== null ? formatCurrency(ev.newPrice, ev.currency) : "N/A";
+      const off = ev.pctOff ? ` (${ev.pctOff}% off)` : "";
+      return [
+        `[${i + 1}] ${ev.title ?? "Tracked Item"}`,
+        `Original Price: ${oldPrice}`,
+        `Current Price:  ${newPrice}${off}`,
+        `View:           ${ev.productUrl}`,
+        ``,
+      ].join("\n");
+    }),
+    `------------------------`,
+    `Check and manage your alerts directly in the Wait-n-Save extension.`,
+  ];
+  const text = textLines.join("\n");
+
+  await sendEmail({ to: recipient.email, subject, html, text });
   console.log(`[mailer] ✅ Digest sent to ${recipient.email} (${events.length} event${isMultiple ? "s" : ""})`);
 }
 

@@ -4,6 +4,8 @@ import { query } from "../db/client";
 import { requireAuth } from "../middleware/auth";
 import { normalizeUrl, extractVariantHint, checkBlockedDomain } from "../services/urlNormalizer";
 import { runChecks } from "../services/scheduler";
+import { sendDigest } from "../services/mailer";
+import type { PriceEvent } from "../services/eventDetector";
 
 const router = Router();
 
@@ -276,6 +278,77 @@ router.post(
       // Fire and forget — respond immediately
       runChecks().catch(console.error);
       res.json({ message: "Price check cycle triggered" });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── POST /api/items/test-alert — Send a sample price drop alert to the logged-in user ──
+router.post(
+  "/test-alert",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.auth!.userId;
+      const userRows = await query<{ email: string }>(
+        "SELECT email FROM users WHERE id = $1",
+        [userId]
+      );
+      if (!userRows[0]) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      const recipientEmail = userRows[0].email;
+
+      // Find an active tracked item for this user
+      const items = await query<{
+        id: string;
+        title: string | null;
+        product_url: string;
+        original_price: string;
+        current_price: string | null;
+        currency: string;
+        image_url: string | null;
+      }>(
+        "SELECT id, title, product_url, original_price, current_price, currency, image_url FROM tracked_items WHERE user_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT 1",
+        [userId]
+      );
+
+      const item = items[0] || {
+        id: "sample-test-id",
+        title: "Sample Tracked Product",
+        product_url: "https://waitnsave.app",
+        original_price: "99.00",
+        current_price: "79.00",
+        currency: "USD",
+        image_url: null,
+      };
+
+      const originalPrice = parseFloat(item.original_price || "99.00");
+      const dropPrice = Math.round(originalPrice * 0.8 * 100) / 100; // 20% drop
+
+      const event: PriceEvent = {
+        itemId: item.id,
+        userId: userId,
+        eventType: "price_drop",
+        originalPrice: originalPrice,
+        newPrice: dropPrice,
+        pctOff: 20,
+        saleBadge: "Price Drop",
+        retailerOriginalPrice: originalPrice,
+        title: item.title ?? "Tracked Product",
+        imageUrl: item.image_url,
+        productUrl: item.product_url,
+        currency: item.currency || "USD",
+      };
+
+      await sendDigest({ email: recipientEmail }, [event]);
+      res.json({
+        success: true,
+        message: `Sample price drop alert sent to ${recipientEmail}`,
+        itemTitle: item.title,
+      });
     } catch (err) {
       next(err);
     }
