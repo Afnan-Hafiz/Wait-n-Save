@@ -101,10 +101,7 @@ const TEMPLATE_PATH = path.join(__dirname, "../templates/priceAlert.html");
 let templateCache: string | null = null;
 
 function getTemplate(): string {
-  if (!templateCache) {
-    templateCache = fs.readFileSync(TEMPLATE_PATH, "utf8");
-  }
-  return templateCache;
+  return fs.readFileSync(TEMPLATE_PATH, "utf8");
 }
 
 // ── HTML helpers ──────────────────────────────────────────────────────────────
@@ -242,8 +239,6 @@ export async function sendDigest(
     .replace(/{{#if multipleItems}}s{{\/if}}/g, isMultiple ? "s" : "")
     .replace(/{{#if multipleItems}}have{{else}}has{{\/if}}/g, isMultiple ? "have" : "has")
     .replace(/{{productCards}}/g, productCards)
-    .replace(/{{unsubscribeUrl}}/g, `${baseUrl}/unsubscribe`)
-    .replace(/{{dashboardUrl}}/g, `${baseUrl}/dashboard`)
     .replace(/{{year}}/g, String(new Date().getFullYear()));
 
   const subject = isMultiple
@@ -264,12 +259,12 @@ export async function sendDigest(
         `[${i + 1}] ${ev.title ?? "Tracked Item"}`,
         `Original Price: ${oldPrice}`,
         `Current Price:  ${newPrice}${off}`,
-        `View & Buy:     ${ev.productUrl}`,
+        `View:           ${ev.productUrl}`,
         ``,
       ].join("\n");
     }),
     `------------------------`,
-    `Manage your alerts at ${baseUrl}`,
+    `Check and manage your alerts directly in the Wait-n-Save extension.`,
   ];
   const text = textLines.join("\n");
 
