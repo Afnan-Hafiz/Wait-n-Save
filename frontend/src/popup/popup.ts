@@ -481,12 +481,48 @@ async function init(): Promise<void> {
       statusEl.textContent = "Dispatching sample price drop alert to your email…";
       statusEl.classList.remove("hidden");
 
-      const res = await sendMessage({ type: "TEST_PRICE_ALERT" });
+      let res = await sendMessage({ type: "TEST_PRICE_ALERT" });
+
+      // Direct fallback if Chrome extension service worker is caching old script
+      if (!res.success && res.error?.includes("Unknown message type")) {
+        const auth = await getAuth();
+        if (auth?.token) {
+          try {
+            const apiRes = await fetch("http://localhost:3001/api/items/test-alert", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${auth.token}`,
+              },
+            });
+            const data = await apiRes.json();
+            if (apiRes.ok) {
+              res = { success: true, data };
+            } else {
+              res = { success: false, error: data?.error ?? "Failed to send alert" };
+            }
+          } catch (err: any) {
+            res = { success: false, error: err.message };
+          }
+        }
+      }
+
       testAlertBtn.removeAttribute("disabled");
 
       if (res.success) {
         statusEl.className = "status-msg success";
-        statusEl.textContent = "✅ Price drop alert sent! Check your email (and Spam folder).";
+        statusEl.textContent = "✅ Price drop alert sent! Check your email.";
+
+        // Also trigger native desktop notification if available
+        if (typeof chrome !== "undefined" && chrome.notifications) {
+          chrome.notifications.create({
+            type: "basic",
+            iconUrl: "icons/icon128.png",
+            title: "Wait-n-Save: Price Alert Dispatched",
+            message: "A sample price drop alert has been sent to your email!",
+            priority: 2,
+          });
+        }
       } else {
         statusEl.className = "status-msg error";
         statusEl.textContent = `❌ ${res.error ?? "Failed to send test alert"}`;
@@ -507,7 +543,27 @@ async function init(): Promise<void> {
       statusEl.textContent = "Checking prices for your items…";
       statusEl.classList.remove("hidden");
 
-      const res = await sendMessage({ type: "TRIGGER_PRICE_CHECK" });
+      let res = await sendMessage({ type: "TRIGGER_PRICE_CHECK" });
+
+      if (!res.success && res.error?.includes("Unknown message type")) {
+        const auth = await getAuth();
+        if (auth?.token) {
+          try {
+            const apiRes = await fetch("http://localhost:3001/api/items/trigger-check", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${auth.token}`,
+              },
+            });
+            const data = await apiRes.json();
+            if (apiRes.ok) {
+              res = { success: true, data };
+            }
+          } catch {}
+        }
+      }
+
       checkNowBtn.removeAttribute("disabled");
 
       if (res.success) {
