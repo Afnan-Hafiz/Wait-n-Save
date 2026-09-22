@@ -57,7 +57,9 @@ export type Message =
   | { type: "GET_TAB_URL" }
   | { type: "GET_ITEMS" }
   | { type: "DELETE_ITEM"; payload: { itemId: string } }
-  | { type: "UNTRACK_URL"; payload: { url: string } };
+  | { type: "UNTRACK_URL"; payload: { url: string } }
+  | { type: "TRIGGER_PRICE_CHECK" }
+  | { type: "TEST_PRICE_ALERT" };
 
 export type MessageResponse =
   | { success: true; data?: unknown }

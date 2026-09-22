@@ -290,6 +290,27 @@ async function handleMessage(
       return { success: true, data: result.data };
     }
 
+    // ── Trigger price check cycle ─────────────────────────────────────────
+    case "TRIGGER_PRICE_CHECK": {
+      const auth = await getAuth();
+      if (!auth) return { success: false, error: "Not logged in" };
+      const result = await apiCall("POST", "/api/items/trigger-check", {}, auth.token);
+      if (!result.ok) return { success: false, error: "Failed to trigger check" };
+      return { success: true, data: result.data };
+    }
+
+    // ── Send test price drop alert email ──────────────────────────────────
+    case "TEST_PRICE_ALERT": {
+      const auth = await getAuth();
+      if (!auth) return { success: false, error: "Not logged in" };
+      const result = await apiCall("POST", "/api/items/test-alert", {}, auth.token);
+      if (!result.ok) {
+        const errData = result.data as { error?: string };
+        return { success: false, error: errData?.error ?? "Failed to send test alert" };
+      }
+      return { success: true, data: result.data };
+    }
+
     default:
       return { success: false, error: "Unknown message type" };
   }

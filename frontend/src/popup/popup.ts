@@ -471,6 +471,60 @@ async function init(): Promise<void> {
     }
     showView("manual");
   });
+
+  const testAlertBtn = $("btn-test-alert");
+  if (testAlertBtn) {
+    testAlertBtn.addEventListener("click", async () => {
+      const statusEl = $("main-status-msg");
+      testAlertBtn.setAttribute("disabled", "true");
+      statusEl.className = "status-msg";
+      statusEl.textContent = "Dispatching sample price drop alert to your email…";
+      statusEl.classList.remove("hidden");
+
+      const res = await sendMessage({ type: "TEST_PRICE_ALERT" });
+      testAlertBtn.removeAttribute("disabled");
+
+      if (res.success) {
+        statusEl.className = "status-msg success";
+        statusEl.textContent = "✅ Price drop alert sent! Check your email (and Spam folder).";
+      } else {
+        statusEl.className = "status-msg error";
+        statusEl.textContent = `❌ ${res.error ?? "Failed to send test alert"}`;
+      }
+
+      setTimeout(() => {
+        statusEl.classList.add("hidden");
+      }, 7000);
+    });
+  }
+
+  const checkNowBtn = $("btn-check-now");
+  if (checkNowBtn) {
+    checkNowBtn.addEventListener("click", async () => {
+      const statusEl = $("main-status-msg");
+      checkNowBtn.setAttribute("disabled", "true");
+      statusEl.className = "status-msg";
+      statusEl.textContent = "Checking prices for your items…";
+      statusEl.classList.remove("hidden");
+
+      const res = await sendMessage({ type: "TRIGGER_PRICE_CHECK" });
+      checkNowBtn.removeAttribute("disabled");
+
+      if (res.success) {
+        statusEl.className = "status-msg success";
+        statusEl.textContent = "✅ Price check cycle started!";
+        await loadItems();
+      } else {
+        statusEl.className = "status-msg error";
+        statusEl.textContent = `❌ ${res.error ?? "Failed to trigger check"}`;
+      }
+
+      setTimeout(() => {
+        statusEl.classList.add("hidden");
+      }, 5000);
+    });
+  }
+
   $("btn-logout").addEventListener("click", async () => {
     await sendMessage({ type: "LOGOUT" });
     showView("login");
