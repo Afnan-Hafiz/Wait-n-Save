@@ -16,7 +16,17 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: config.corsOrigin,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. curl, Postman)
+      if (!origin) return callback(null, true);
+      // Allow any Chrome/Firefox extension origin
+      if (origin.startsWith("chrome-extension://") || origin.startsWith("moz-extension://")) {
+        return callback(null, true);
+      }
+      // Allow the configured CORS origin
+      if (origin === config.corsOrigin) return callback(null, true);
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,

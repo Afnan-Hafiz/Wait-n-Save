@@ -47,6 +47,10 @@ const envSchema = z.object({
   GMAIL_APP_PASSWORD: z.string().optional(),
   EMAIL_FROM_NAME: z.string().default("Wait-n-Save"),
 
+  // Resend (transactional email)
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().default("onboarding@resend.dev"),
+
   // Data retention
   RETENTION_FULL_DAYS: z.coerce.number().int().positive().default(90),
   RETENTION_KEEP_DAILY_DAYS: z.coerce.number().int().positive().default(365),
@@ -91,6 +95,8 @@ export const config = {
     gmailUser: env.GMAIL_USER,
     gmailAppPassword: env.GMAIL_APP_PASSWORD,
     fromName: env.EMAIL_FROM_NAME,
+    resendApiKey: env.RESEND_API_KEY,
+    resendFromEmail: env.RESEND_FROM_EMAIL,
   },
 
   retention: {

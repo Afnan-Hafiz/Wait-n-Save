@@ -1,41 +1,94 @@
 /**
  * mailer.ts
  *
- * Sends digest emails via Gmail SMTP (App Password).
- * Falls back to a console transport when GMAIL_APP_PASSWORD is not set,
- * so the app is fully functional in dev without real credentials.
+ * Sends transactional emails via Resend (primary) or falls back to
+ * console transport in dev when no API key is configured.
  */
 
 import nodemailer, { Transporter } from "nodemailer";
+import { Resend } from "resend";
 import fs from "fs";
 import path from "path";
 import { config } from "../config";
 import type { PriceEvent } from "./eventDetector";
 
-// ── Transport singleton ───────────────────────────────────────────────────────
+// ── Resend client (used when RESEND_API_KEY is set) ──────────────────────────
+let resendClient: Resend | null = null;
+
+function getResend(): Resend | null {
+  if (resendClient) return resendClient;
+  if (config.email.resendApiKey) {
+    resendClient = new Resend(config.email.resendApiKey);
+    console.log("[mailer] Using Resend transport");
+  }
+  return resendClient;
+}
+
+// ── Nodemailer fallback transport (console only in dev) ───────────────────────
 let transport: Transporter | null = null;
 
 export function getTransport(): Transporter {
   if (transport) return transport;
+  // Console transport — logs email to stdout, no real delivery
+  transport = nodemailer.createTransport({ jsonTransport: true });
+  console.log("[mailer] ⚠️  No email credentials found — using console transport (emails logged to stdout)");
+  return transport;
+}
 
+// ── Core send helper (Gmail SMTP or Resend, console fallback) ────────────────
+export async function sendEmail(opts: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}): Promise<void> {
+  // 1. Gmail SMTP (if configured, direct delivery to inbox)
   if (config.email.gmailUser && config.email.gmailAppPassword) {
-    transport = nodemailer.createTransport({
+    const smtp = nodemailer.createTransport({
       service: "gmail",
       auth: {
         user: config.email.gmailUser,
         pass: config.email.gmailAppPassword,
       },
     });
-    console.log("[mailer] Using Gmail SMTP transport");
-  } else {
-    // Console transport — logs email to stdout, no real delivery
-    transport = nodemailer.createTransport({
-      jsonTransport: true,
+    await smtp.sendMail({
+      from: `"${config.email.fromName}" <${config.email.gmailUser}>`,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      text: opts.text,
     });
-    console.log("[mailer] ⚠️  No Gmail credentials found — using console transport (emails logged to stdout)");
+    console.log(`[mailer] ✅ Email sent via Gmail SMTP to ${opts.to}`);
+    return;
   }
 
-  return transport;
+  // 2. Resend (transactional email)
+  const resend = getResend();
+  if (resend) {
+    const { error } = await resend.emails.send({
+      from: `${config.email.fromName} <${config.email.resendFromEmail}>`,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      text: opts.text,
+    });
+    if (error) throw new Error(`Resend error: ${error.message}`);
+    console.log(`[mailer] ✅ Email sent via Resend to ${opts.to}`);
+    return;
+  }
+
+  // 3. Console fallback
+  const t = getTransport();
+  const info = await t.sendMail({
+    from: `"${config.email.fromName}" <noreply@waitnsave.app>`,
+    to: opts.to,
+    subject: opts.subject,
+    html: opts.html,
+    text: opts.text,
+  });
+  console.log("[mailer] 📧 Email (console mode):", JSON.stringify(
+    JSON.parse((info as unknown as { message: string }).message), null, 2
+  ));
 }
 
 // ── Template loading ─────────────────────────────────────────────────────────
@@ -192,27 +245,7 @@ export async function sendDigest(
     ? `💸 ${events.length} price alerts — Wait-n-Save`
     : `${EVENT_BADGE_LABELS[events[0].eventType] ?? "Price alert"}: ${events[0].title ?? "tracked item"}`;
 
-  const transport = getTransport();
-
-  const mailOptions = {
-    from: `"${config.email.fromName}" <${config.email.gmailUser ?? "noreply@waitnsave.app"}>`,
-    to: recipient.email,
-    subject,
-    html,
-    // Deliverability: allow one-click unsubscribe
-    headers: {
-      "List-Unsubscribe": `<${baseUrl}/unsubscribe>`,
-      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-    },
-  };
-
-  if (!config.email.gmailUser || !config.email.gmailAppPassword) {
-    // Console transport — log the stringified mail object
-    const info = await transport.sendMail(mailOptions);
-    console.log("[mailer] 📧 Email (console mode):", JSON.stringify(JSON.parse((info as unknown as { message: string }).message), null, 2));
-    return;
-  }
-
-  await transport.sendMail(mailOptions);
+  await sendEmail({ to: recipient.email, subject, html });
   console.log(`[mailer] ✅ Digest sent to ${recipient.email} (${events.length} event${isMultiple ? "s" : ""})`);
 }
+
